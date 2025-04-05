@@ -4,6 +4,9 @@ import {
   Body,
   UnauthorizedException,
   HttpStatus,
+  Get,
+  UseGuards,
+  Req,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -15,10 +18,14 @@ import {
 import { AuthService } from './auth.service';
 import { SignUpDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
+import { JwtAuthGuard } from './jwt-auth.guard';
+import { Logger } from '@nestjs/common';
 
 @ApiTags('auth') // Gắn thẻ Swagger cho nhóm endpoint "auth"
 @Controller('auth')
 export class AuthController {
+  private readonly logger = new Logger(AuthController.name);
+
   constructor(private readonly authService: AuthService) {}
 
   @Post('signup')
@@ -82,13 +89,48 @@ export class AuthController {
     description: 'Thông tin đăng nhập',
   })
   async login(@Body() loginDto: LoginDto) {
-    const user = await this.authService.validateUser(
-      loginDto.email,
-      loginDto.password,
-    );
-    if (!user) {
-      throw new UnauthorizedException('Thông tin đăng nhập không hợp lệ');
+    try {
+      const user = await this.authService.validateUser(
+        loginDto.email,
+        loginDto.password,
+      );
+      return this.authService.login(user);
+    } catch (error) {
+      throw new UnauthorizedException('Invalid credentials');
     }
-    return this.authService.login(user);
+  }
+
+  @Get('profile')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Lấy thông tin người dùng',
+    description: 'Lấy thông tin người dùng hiện tại bằng JWT token',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Lấy thông tin thành công',
+    schema: {
+      example: {
+        _id: 'user_id',
+        email: 'user@example.com',
+        name: 'John Doe',
+        role: 'user',
+        isActive: true,
+        phone: '',
+        age: 0,
+        address: '',
+      },
+    },
+  })
+  @ApiResponse({
+    status: HttpStatus.UNAUTHORIZED,
+    description: 'Token không hợp lệ hoặc đã hết hạn',
+  })
+  async getProfile(@Req() req) {
+    this.logger.debug(`Request user: ${JSON.stringify(req.user)}`);
+    // Trả về thông tin người dùng từ request
+    const { password, ...result } = req.user;
+    return result;
   }
 }

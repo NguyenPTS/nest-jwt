@@ -1,50 +1,37 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { NestExpressApplication } from '@nestjs/platform-express';
-import { join } from 'path';
-import { config } from 'dotenv';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ValidationPipe } from '@nestjs/common';
-
-config(); // Load environment variables from .env file
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { Logger } from '@nestjs/common';
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const app = await NestFactory.create(AppModule);
+  const logger = new Logger('Bootstrap');
 
-  app.useStaticAssets(join(__dirname, '..', 'public')); // Serve static assets
-  app.setBaseViewsDir(join(__dirname, '..', 'views')); // Set views directory
-  app.setViewEngine('ejs');
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true, // Loại bỏ các thuộc tính không được định nghĩa trong DTO
-      forbidNonWhitelisted: true, // Từ chối các thuộc tính không hợp lệ
-      transform: true, // Tự động chuyển đổi payload thành kiểu dữ liệu DTO
-    }),
-  );
+  // Enable CORS
+  app.enableCors({
+    origin: true, // Cho phép tất cả các domain
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+    credentials: true,
+    allowedHeaders: 'Content-Type, Accept, Authorization',
+  });
 
-  // Cấu hình Swagger
+  // Global validation pipe
+  app.useGlobalPipes(new ValidationPipe());
+
+  // Swagger configuration
   const config = new DocumentBuilder()
     .setTitle('NestJS JWT Authentication API')
-    .setDescription('API documentation for authentication and user management')
+    .setDescription('API documentation for NestJS JWT Authentication')
     .setVersion('1.0')
-    .addTag('auth', 'Authentication endpoints')
-    .addTag('users', 'User management endpoints')
     .addBearerAuth()
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api', app, document, {
-    swaggerOptions: {
-      persistAuthorization: true,
-      docExpansion: 'list',
-      filter: true,
-      showExtensions: true,
-      showCommonExtensions: true,
-    },
-  });
+  SwaggerModule.setup('api', app, document);
 
-  const port = process.env.PORT || 4000; // Default to port 4000 if undefined
+  const port = process.env.PORT || 3000;
   await app.listen(port);
-  console.log(`Application is running on: http://localhost:${port}/api`);
+  logger.log(`Application is running on: http://localhost:${port}`);
 }
 bootstrap();

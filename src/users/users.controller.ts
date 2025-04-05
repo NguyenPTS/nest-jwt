@@ -6,78 +6,212 @@ import {
   Patch,
   Param,
   Delete,
+  UseGuards,
+  Req,
+  NotFoundException,
+  Query,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiParam,
+  ApiBearerAuth,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { User } from './schemas/user.schema';
+import { JwtRolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
+import { UserRole } from './schemas/user.schema';
+import { AuthService } from '../auth/auth.service';
+import { Logger } from '@nestjs/common';
 
 @ApiTags('users')
 @Controller('users')
+@UseGuards(JwtRolesGuard)
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  private readonly logger = new Logger(UsersController.name);
+
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly authService: AuthService,
+  ) {}
 
   @Post()
-  @ApiOperation({ summary: 'Create a new user' })
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Tạo người dùng mới' })
   @ApiResponse({
     status: 201,
-    description: 'The user has been successfully created.',
+    description: 'Người dùng đã được tạo thành công.',
   })
-  @ApiResponse({ status: 400, description: 'Invalid input.' })
-  create(@Body() createUserDto: CreateUserDto): Promise<User> {
+  @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ.' })
+  create(@Body() createUserDto: CreateUserDto) {
     return this.usersService.create(createUserDto);
   }
 
   @Get()
-  @ApiOperation({ summary: 'Retrieve all users' })
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiQuery({ name: 'page', required: false, description: 'Số trang (mặc định: 1)' })
+  @ApiQuery({ name: 'limit', required: false, description: 'Số lượng bản ghi mỗi trang (mặc định: 10)' })
+  @ApiQuery({ name: 'name', required: false, description: 'Tên người dùng cần tìm' })
+  @ApiOperation({ summary: 'Lấy danh sách người dùng (có phân trang và tìm kiếm)' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Danh sách người dùng với thông tin phân trang.',
+    schema: {
+      example: {
+        data: [
+          {
+            _id: 'user_id_1',
+            email: 'user1@example.com',
+            name: 'John Doe',
+            role: 'user',
+            isActive: true
+          }
+        ],
+        total: 100,
+        page: 1,
+        limit: 10,
+        totalPages: 10
+      }
+    }
+  })
+  async findAll(
+    @Query('page') page: number = 1,
+    @Query('limit') limit: number = 10,
+    @Query('name') name?: string
+  ) {
+    try {
+      this.logger.debug(`Fetching users with pagination: page=${page}, limit=${limit}${name ? `, name=${name}` : ''}`);
+      const result = await this.usersService.findAllWithPagination(page, limit, name);
+      this.logger.debug(`Found ${result.data.length} users out of ${result.total} total`);
+      return result;
+    } catch (error) {
+      this.logger.error(`Error fetching users: ${error.message}`);
+      throw error;
+    }
+  }
+
+  @Get('profile')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Lấy thông tin người dùng',
+    description: 'Lấy thông tin người dùng hiện tại bằng JWT token',
+  })
   @ApiResponse({
     status: 200,
-    description: 'List of users retrieved successfully.',
+    description: 'Lấy thông tin thành công',
+    schema: {
+      example: {
+        _id: 'user_id',
+        email: 'user@example.com',
+        name: 'John Doe',
+        role: 'user',
+        isActive: true,
+        phone: '',
+        age: 0,
+        address: '',
+      },
+    },
   })
-  findAll(): Promise<User[]> {
-    return this.usersService.findAll();
+  @ApiResponse({
+    status: 401,
+    description: 'Token không hợp lệ hoặc đã hết hạn',
+  })
+  async getProfile(@Req() req) {
+    this.logger.debug(`Request user: ${JSON.stringify(req.user)}`);
+    return this.authService.getUser(req.user.sub);
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Retrieve a user by ID' })
-  @ApiParam({
-    name: 'id',
-    description: 'The ID of the user to retrieve',
-    type: String,
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Lấy thông tin người dùng theo ID (Chỉ admin)' })
+  @ApiParam({ name: 'id', description: 'ID của người dùng' })
+  @ApiResponse({
+    status: 200,
+    description: 'Thông tin người dùng.',
+    schema: {
+      example: {
+        _id: 'user_id',
+        email: 'user@example.com',
+        name: 'John Doe',
+        role: 'user',
+        isActive: true,
+        phone: '',
+        age: 0,
+        address: '',
+      },
+    },
   })
-  @ApiResponse({ status: 200, description: 'User retrieved successfully.' })
-  @ApiResponse({ status: 404, description: 'User not found.' })
-  findOne(@Param('id') id: string): Promise<User> {
-    return this.usersService.findOne(id);
+  @ApiResponse({ status: 404, description: 'Không tìm thấy người dùng.' })
+  @ApiResponse({ status: 403, description: 'Không có quyền truy cập.' })
+  async findOne(@Param('id') id: string) {
+    const user = await this.usersService.findOne(id);
+    if (!user) {
+      throw new NotFoundException('Không tìm thấy người dùng');
+    }
+    return user;
   }
 
   @Patch(':id')
-  @ApiOperation({ summary: 'Update a user by ID' })
-  @ApiParam({
-    name: 'id',
-    description: 'The ID of the user to update',
-    type: String,
-  })
-  @ApiResponse({ status: 200, description: 'User updated successfully.' })
-  @ApiResponse({ status: 404, description: 'User not found.' })
-  update(
-    @Param('id') id: string,
-    @Body() updateUserDto: UpdateUserDto,
-  ): Promise<User> {
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Cập nhật thông tin người dùng' })
+  @ApiParam({ name: 'id', description: 'ID của người dùng' })
+  @ApiResponse({ status: 200, description: 'Cập nhật thành công.' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy người dùng.' })
+  update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
     return this.usersService.update(id, updateUserDto);
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Delete a user by ID' })
-  @ApiParam({
-    name: 'id',
-    description: 'The ID of the user to delete',
-    type: String,
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Xóa người dùng' })
+  @ApiParam({ name: 'id', description: 'ID của người dùng' })
+  @ApiResponse({ status: 200, description: 'Xóa thành công.' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy người dùng.' })
+  async remove(@Param('id') id: string) {
+    await this.usersService.remove(id);
+    return {
+      statusCode: 200,
+      message: 'Xóa thành công.',
+    };
+  }
+
+  @Get('check-admin/:id')
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Kiểm tra role admin của người dùng' })
+  @ApiParam({ name: 'id', description: 'ID của người dùng cần kiểm tra' })
+  @ApiResponse({
+    status: 200,
+    description: 'Kết quả kiểm tra role admin',
+    schema: {
+      example: {
+        isAdmin: true,
+        user: {
+          _id: 'user_id',
+          email: 'admin@example.com',
+          name: 'Admin User',
+          role: 'admin',
+        },
+      },
+    },
   })
-  @ApiResponse({ status: 200, description: 'User deleted successfully.' })
-  @ApiResponse({ status: 404, description: 'User not found.' })
-  remove(@Param('id') id: string): Promise<User> {
-    return this.usersService.remove(id);
+  @ApiResponse({ status: 404, description: 'Không tìm thấy người dùng.' })
+  async checkAdmin(@Param('id') id: string) {
+    const user = await this.usersService.findOne(id);
+    return {
+      isAdmin: user.role === UserRole.ADMIN,
+      user: {
+        _id: user._id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+      },
+    };
   }
 }
