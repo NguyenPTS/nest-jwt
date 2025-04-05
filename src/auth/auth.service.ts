@@ -1,3 +1,4 @@
+import { jwtConstants } from './../config/jwt.config';
 import {
   Injectable,
   UnauthorizedException,
@@ -12,7 +13,8 @@ import { has, omit } from 'lodash';
 import { User } from 'src/users/schemas/user.schema';
 import { SignUpDto } from './dto/signup.dto';
 import { CreateUserDto } from '../users/dto/create-user.dto';
-import { ClsService } from 'nestjs-cls'; // Nếu bạn đang sử dụng thư viện `nestjs-cls`
+import { ClsService } from 'nestjs-cls';
+import { ConstantConfig } from '../config/constants';
 
 @Injectable()
 export class AuthService {
@@ -93,4 +95,4 @@ export class AuthService {
   getUser(): User {
     return this.clsService.get(ConstantConfig.REQUEST_ID) as User;
   }
-}
+} 
