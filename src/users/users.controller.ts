@@ -126,34 +126,18 @@ export class UsersController {
   }
 
   @Get('profile')
+  @Roles(UserRole.USER)
   @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Lấy thông tin người dùng',
-    description: 'Lấy thông tin người dùng hiện tại bằng JWT token',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Lấy thông tin thành công',
-    schema: {
-      example: {
-        _id: 'user_id',
-        email: 'user@example.com',
-        name: 'John Doe',
-        role: 'user',
-        isActive: true,
-        phone: '',
-        age: 0,
-        address: '',
-      },
-    },
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Token không hợp lệ hoặc đã hết hạn',
-  })
+  @ApiOperation({ summary: 'Lấy thông tin người dùng hiện tại' })
+  @ApiResponse({ status: 200, description: 'Thông tin người dùng.' })
   async getProfile(@Req() req) {
-    this.logger.debug(`Request user: ${JSON.stringify(req.user)}`);
-    return this.authService.getUser(req.user.sub);
+    try {
+      this.logger.debug('Getting user profile');
+      return this.authService.getUser();
+    } catch (error) {
+      this.logger.error(`Error getting profile: ${error.message}`);
+      throw error;
+    }
   }
 
   @Get(':id')
