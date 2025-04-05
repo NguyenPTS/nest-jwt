@@ -4,6 +4,7 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
 import { config } from 'dotenv';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { ValidationPipe } from '@nestjs/common';
 
 config(); // Load environment variables from .env file
 
@@ -13,18 +14,36 @@ async function bootstrap() {
   app.useStaticAssets(join(__dirname, '..', 'public')); // Serve static assets
   app.setBaseViewsDir(join(__dirname, '..', 'views')); // Set views directory
   app.setViewEngine('ejs');
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true, // Loại bỏ các thuộc tính không được định nghĩa trong DTO
+      forbidNonWhitelisted: true, // Từ chối các thuộc tính không hợp lệ
+      transform: true, // Tự động chuyển đổi payload thành kiểu dữ liệu DTO
+    }),
+  );
 
-  // Swagger configuration
+  // Cấu hình Swagger
   const config = new DocumentBuilder()
-    .setTitle('NestJS JWT API')
-    .setDescription('API documentation for the NestJS JWT project')
+    .setTitle('NestJS JWT Authentication API')
+    .setDescription('API documentation for authentication and user management')
     .setVersion('1.0')
-    .addBearerAuth() // Add Bearer token authentication
+    .addTag('auth', 'Authentication endpoints')
+    .addTag('users', 'User management endpoints')
+    .addBearerAuth()
     .build();
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api', app, document); // Swagger UI available at /api
 
-  const port = process.env.PORT || 3000; // Default to port 3000 if undefined
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('api', app, document, {
+    swaggerOptions: {
+      persistAuthorization: true,
+      docExpansion: 'list',
+      filter: true,
+      showExtensions: true,
+      showCommonExtensions: true,
+    },
+  });
+
+  const port = process.env.PORT || 4000; // Default to port 4000 if undefined
   await app.listen(port);
   console.log(`Application is running on: http://localhost:${port}/api`);
 }
