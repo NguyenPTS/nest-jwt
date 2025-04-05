@@ -55,41 +55,70 @@ export class UsersController {
   @Get()
   @Roles(UserRole.ADMIN)
   @ApiBearerAuth()
-  @ApiQuery({ name: 'page', required: false, description: 'Số trang (mặc định: 1)' })
-  @ApiQuery({ name: 'limit', required: false, description: 'Số lượng bản ghi mỗi trang (mặc định: 10)' })
-  @ApiQuery({ name: 'name', required: false, description: 'Tên người dùng cần tìm' })
-  @ApiOperation({ summary: 'Lấy danh sách người dùng (có phân trang và tìm kiếm)' })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'Danh sách người dùng với thông tin phân trang.',
+  @ApiOperation({
+    summary: 'Lấy danh sách tất cả người dùng (có phân trang và lọc theo tên)',
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    description: 'Số trang (mặc định: 1)',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    description: 'Số lượng bản ghi mỗi trang (mặc định: 10)',
+  })
+  @ApiQuery({
+    name: 'name',
+    required: false,
+    description: 'Tên người dùng để lọc (không phân biệt hoa thường)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Danh sách người dùng (có phân trang và lọc theo tên).',
     schema: {
       example: {
+        total: 100,
+        page: 1,
+        limit: 10,
         data: [
           {
             _id: 'user_id_1',
             email: 'user1@example.com',
             name: 'John Doe',
             role: 'user',
-            isActive: true
-          }
+            isActive: true,
+          },
+          {
+            _id: 'user_id_2',
+            email: 'user2@example.com',
+            name: 'Jane Doe',
+            role: 'admin',
+            isActive: true,
+          },
         ],
-        total: 100,
-        page: 1,
-        limit: 10,
-        totalPages: 10
-      }
-    }
+      },
+    },
   })
   async findAll(
-    @Query('page') page: number = 1,
-    @Query('limit') limit: number = 10,
-    @Query('name') name?: string
+    @Query('page') page = 1,
+    @Query('limit') limit = 10,
+    @Query('name') name?: string,
   ) {
     try {
-      this.logger.debug(`Fetching users with pagination: page=${page}, limit=${limit}${name ? `, name=${name}` : ''}`);
-      const result = await this.usersService.findAllWithPagination(page, limit, name);
-      this.logger.debug(`Found ${result.data.length} users out of ${result.total} total`);
-      return result;
+      this.logger.debug(
+        `Fetching users with pagination: page=${page}, limit=${limit}, name=${name}`,
+      );
+      const users = await this.usersService.findAllWithPagination(
+        page,
+        limit,
+        name,
+      );
+      return {
+        statusCode: 200,
+        message: 'Danh sách người dùng.',
+        data: users,
+      };
     } catch (error) {
       this.logger.error(`Error fetching users: ${error.message}`);
       throw error;
